@@ -69,6 +69,8 @@ pub struct Buffer {
     pub buffer: wl_buffer::WlBuffer,
     node: Option<PathBuf>,
     pub size: (u32, u32),
+    #[cfg(feature = "no-subsurfaces")]
+    pub mmap: memmap2::Mmap,
 }
 
 impl AppData {
@@ -83,8 +85,6 @@ impl AppData {
             (),
         );
 
-        pool.destroy();
-
         let format = wl_shm::Format::try_from(format).unwrap();
         let buffer = pool.create_buffer(
             0,
@@ -95,6 +95,11 @@ impl AppData {
             &self.qh,
             (),
         );
+
+        pool.destroy();
+
+        #[cfg(feature = "no-subsurfaces")]
+        let mmap = unsafe { memmap2::Mmap::map(&fd).unwrap() };
 
         Buffer {
             backing: Arc::new(
@@ -109,12 +114,14 @@ impl AppData {
                 .into(),
             ),
             buffer,
+            #[cfg(feature = "no-subsurfaces")]
+            mmap,
             node: None,
             size: (width, height),
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(not(feature = "force-shm-screencopy"))]
     fn create_gbm_buffer(
         &self,
         format: u32,
@@ -215,6 +222,7 @@ impl AppData {
         // XXX Handle other formats?
         let format = u32::from(wl_shm::Format::Abgr8888);
 
+        #[cfg(not(feature = "force-shm-screencopy"))]
         if let Some((_, modifiers)) = formats.dmabuf_formats.iter().find(|(f, _)| *f == format) {
             match self.create_gbm_buffer(format, formats.buffer_size, false) {
                 Ok(Some(buffer)) => {

@@ -208,12 +208,16 @@ impl ScreencopyHandler for AppData {
         let front = session.buffers.as_mut().unwrap().first_mut().unwrap();
         let (buffer, release) = SubsurfaceBuffer::new(front.backing.clone());
         session.release = Some(release);
-        // let img = unsafe { front.to_image() };
-        // let image = CaptureImage { img };
         let image = CaptureImage {
             wl_buffer: buffer,
             width: front.size.0,
             height: front.size.1,
+            #[cfg(feature = "no-subsurfaces")]
+            image: cosmic::widget::image::Handle::from_pixels(
+                front.size.0,
+                front.size.1,
+                front.mmap.to_vec(),
+            ),
         };
         match &capture.source {
             CaptureSource::Toplevel(toplevel) => {
@@ -234,10 +238,10 @@ impl ScreencopyHandler for AppData {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         screencopy_frame: &zcosmic_screencopy_frame_v2::ZcosmicScreencopyFrameV2,
-        _reason: WEnum<zcosmic_screencopy_frame_v2::FailureReason>,
+        reason: WEnum<zcosmic_screencopy_frame_v2::FailureReason>,
     ) {
         // TODO
-        log::error!("Screencopy failed");
+        log::error!("Screencopy failed: {:?}", reason);
         let session = &screencopy_frame.data::<FrameData>().unwrap().session;
         if let Some(capture) = Capture::for_session(session) {
             capture.stop();
